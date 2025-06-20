@@ -12,7 +12,7 @@ tools which are built into Sway.
 A openRC User service script is provided here which can be easily
 adapted to systemd.
 
-Refer to https://git.sr.ht/~prabuanand/dotfiles for how this tool can
+Refer to my [dotiles](https://git.sr.ht/~prabuanand/dotfiles) for how this tool can
 be integrated with tools like [tofi](https://github.com/philj56/tofi)
 and [mako](https://github.com/emersion/mako)
 
