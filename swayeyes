@@ -1,0 +1,208 @@
+#!/usr/bin/env sh
+
+# Define log file and next blanking time file
+SERVICE_NAME="swayeyes" # Name used in logfiles
+
+# Log File Configuration
+LOG_DIR="$HOME/.local/share/$SERVICE_NAME/logs" # Persistent user-specific log directory
+LOG_FILE="$LOG_DIR/swayeyes.log"               # Log file path
+
+# Temporary File Configuration
+NEXT_BLANK_FILE="/tmp/swayeyes.next"
+PRE_ALERT_FILE="/tmp/swayeyes.pre_alert_active" # Flag file to indicate pre-alert is active for i3blocks
+
+# Break and Interval Settings
+S_BREAK=20 # Short break duration in seconds
+L_BREAK=60 # Long break duration in seconds
+i=0 # Loop counter
+POLLING_INTERVAL=10 # Check time for blanking in seconds
+BLANKING_INTERVAL=900 # Interval between blanking events in seconds
+
+# Pre-alert settings
+PRE_ALERT_SECONDS=60 # Trigger notification 60 seconds before blanking
+
+# i3blocks Integration. Uncomment or modify if needed
+I3BLOCKS_SIGNAL=3 # Ensure this matches the 'signal=' in your i3blocks config for 'swayeyes'
+
+# Global setup and checks
+
+# Create log directory (must be before any logging attempts)
+mkdir -p "$LOG_DIR" || { echo "$(date) ["$SERVICE_NAME"] [PID=$$] ERROR: Failed to create log directory: $LOG_DIR. Exiting." >&2; exit 1; }
+
+# Ensure SWAYSOCK is set for swaymsg
+export SWAYSOCK=$(find /run/user/$(id -u) -type s -name 'sway-ipc.*' 2>/dev/null | head -n 1)
+if [ -z "$SWAYSOCK" ]; then
+    echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] ERROR: SWAYSOCK environment variable not set. Sway commands will likely fail. Check if Sway running?" >> "$LOG_FILE"
+    notify-send "Failed to start SERVICE_NAME. Check logs at $LOG_FILE"
+    # The program will exit here as swaymsg function is critical.
+    exit 1
+fi
+
+# Helper Function for Notifications
+send_notification() {
+    local message="$1"
+    local app_name="RSI"
+
+    # Check if notify-send is available before trying to execute it
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -a "$app_name" "$message"
+    else
+        echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] $message (notify-send not found)" >> "$LOG_FILE"
+    fi
+}
+# Trap for graceful exit when stopped by OpenRC (sending SIGTERM) or by Ctrl+C (SIGINT).
+# A message is logged and the script exits
+cleanup() {
+    # The shell automatically passes the name of the signal that triggered the trap as the first argument ($1).
+    local TRIGGERING_SIGNAL="$1" # Store it in a local variable for clarity in the message
+    rm -f "$NEXT_BLANK_FILE" "$PRE_ALERT_FILE"
+    echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] $SERVICE_NAME terminated by $TRIGGERING_SIGNAL. Cleaned up temporary files." >> "$LOG_FILE"
+    # Add any other necessary cleanup here
+    exit 0 # It's good practice to exit after cleanup
+}
+trap 'cleanup "SIGINT"' SIGINT
+trap 'cleanup "SIGTERM"' SIGTERM
+trap 'cleanup "SIGHUP"' SIGHUP
+
+# Function to update the next blanking time file and stores the epoch timestamp of the next blanking event
+update_next_blank_epoch() {
+    echo "$1" > "$NEXT_BLANK_FILE"
+}
+
+# --- NEW: Pre-alert check function ---
+# Returns 0 (true) if current time is within PRE_ALERT_SECONDS of NEXT_BLANK_EPOCH,
+# and PRE_ALERT_FILE is not yet created for this cycle.
+# Returns 1 (false) otherwise.
+pre_alert_check() {
+    local current_epoch=$(date +%s)
+    local next_blank_epoch=$(cat "$NEXT_BLANK_FILE" 2>/dev/null)
+
+    # Basic validation for next_blank_epoch
+    if [ -z "$next_blank_epoch" ] || [ "$next_blank_epoch" -le 0 ]; then
+        return 1 # Not valid to check pre-alert
+    fi
+
+    local pre_alert_start_epoch=$(( next_blank_epoch - PRE_ALERT_SECONDS ))
+
+    # Check if we are in the pre-alert window
+    if [ "$current_epoch" -ge "$pre_alert_start_epoch" ] && [ "$current_epoch" -lt "$next_blank_epoch" ]; then
+        return 0 # True: within pre-alert window
+    else
+        return 1 # False: not within pre-alert window
+    fi
+}
+# -------------------------------------
+# --- Handle status argument ---
+check_status() {
+    if [ -f "$NEXT_BLANK_FILE" ]; then
+        next_epoch=$(cat "$NEXT_BLANK_FILE")
+        if [ -n "$next_epoch" ] && [ "$next_epoch" -gt 0 ] 2>/dev/null; then
+            echo "Next screen blanking at: $(date -d "@$next_epoch" +"%H:%M:%S %Z")"
+            exit 0 # Service is running and valid: return 0
+        else
+            echo "Invalid time in $NEXT_BLANK_FILE. Service might not be running correctly."
+            exit 1 # File exists but content is bad: return 1
+        fi
+    else
+        echo "Screen blanking not scheduled (file $NEXT_BLANK_FILE not found)."
+        exit 1 # Service is stopped (file not found): return 1
+    fi
+}
+# ---------------------------
+
+daemon_start() {
+    # Initial log and notification when the daemon starts
+    echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] swayeyes started." >> "$LOG_FILE"
+
+    # --- Initial setup for the first blanking time ---
+    # Calculate the epoch timestamp for the first blanking (current time + 15 minutes)
+    INITIAL_BLANK_EPOCH=$(( $(date +%s) + $BLANKING_INTERVAL ))
+    update_next_blank_epoch "$INITIAL_BLANK_EPOCH"
+    echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] Initial blanking scheduled for $(date -d "@$INITIAL_BLANK_EPOCH" +"%H:%M:%S %Z")." >> "$LOG_FILE"
+    # Clean up pre-alert file on startup to ensure a fresh state
+    rm -f "$PRE_ALERT_FILE"
+    pkill -RTMIN+"$I3BLOCKS_SIGNAL" i3blocks # Update i3blocks to clear any lingering pre-alert icon
+}
+# Main loop for screen blanking with polling for time
+main_loop() {
+    CURRENT_EPOCH=$(date +%s)
+    NEXT_BLANK_EPOCH=$(cat "$NEXT_BLANK_FILE" 2>/dev/null) # Read target from file
+
+    # Defensive check: If file is empty or invalid, recalculate next blanking based on current time
+    if [ -z "$NEXT_BLANK_EPOCH" ] || [ "$NEXT_BLANK_EPOCH" -le 0 ]; then
+        echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] ERROR: Blanking time file invalid. Resetting timer." >> "$LOG_FILE"
+        NEXT_BLANK_EPOCH=$(( CURRENT_EPOCH + $BLANKING_INTERVAL ))
+        update_next_blank_epoch "$NEXT_BLANK_EPOCH"
+    fi
+
+    # --- Pre-alert logic within the main loop ---
+    if pre_alert_check; then
+        if [ ! -f "$PRE_ALERT_FILE" ]; then # Check if the pre-alert hasn't been triggered for this cycle yet
+            # send_notification "Screen will blank soon." "RSI: 30 seconds to break!"
+            # Create the file to mark alert as shown for this cycle and Signal i3blocks to change icon
+            touch "$PRE_ALERT_FILE" && pkill -RTMIN+"$I3BLOCKS_SIGNAL" i3blocks
+            echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] Pre-blanking alert triggered." >> "$LOG_FILE"
+        fi
+    else
+        # If not in pre-alert window, ensure the pre-alert file is removed
+        # This handles cases where time might jump, or after a blanking cycle.
+        if [ -f "$PRE_ALERT_FILE" ]; then
+            rm -f "$PRE_ALERT_FILE"
+            pkill -RTMIN+"$I3BLOCKS_SIGNAL" i3blocks # Signal i3blocks to revert icon
+        fi
+    fi
+    # --------------------------------------------------
+    # Check if it's time to blank the screen
+    if [ "$CURRENT_EPOCH" -ge "$NEXT_BLANK_EPOCH" ]; then
+        i=$((i+1)) # Increment loop counter
+
+        # Determine break type and send pre-blanking notification
+        if [ $((i % 5)) -eq 0 ]; then # Every 5th cycle is a long break
+            send_notification "Time to rest your eyes by taking a long break"
+            CURRENT_BREAK_DURATION=$L_BREAK
+        else # Other cycles are short breaks
+            send_notification "Time to rest your eyes by taking a short break"
+            CURRENT_BREAK_DURATION=$S_BREAK
+        fi
+
+        sleep 2 # Short pause before blanking allows notification to be seen
+
+        # Blank the screen
+        swaymsg "output * dpms off"
+        echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] [count=$i] screen blanked for ${CURRENT_BREAK_DURATION}s." >> "$LOG_FILE"
+
+        # Time the screen stays blank
+        sleep "$CURRENT_BREAK_DURATION"
+
+        # Unblank the screen
+        swaymsg "output * dpms on"
+        echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] [count=$i] screen unblanked." >> "$LOG_FILE"
+
+        # Calculate the NEXT blanking time (after this cycle completes)
+        # This calculates 15 minutes from NOW, not from the previous blanking time.
+        NEXT_BLANK_EPOCH=$(( $(date +%s) + $BLANKING_INTERVAL ))
+        update_next_blank_epoch "$NEXT_BLANK_EPOCH"
+        echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] Next blanking scheduled for $(date -d "@$NEXT_BLANK_EPOCH" +"%H:%M:%S %Z")." >> "$LOG_FILE"
+
+    else
+        # Not time to blank yet
+        sleep "$POLLING_INTERVAL"
+    fi
+}
+case "$1" in
+    start)
+        daemon_start
+        while true; do
+            main_loop
+        done
+        ;;
+    status)
+        check_status
+        ;;
+    *)
+        echo "Usage: $0 start | status"
+        exit 1
+        ;;
+esac
+# This line would only be reached if the while loop somehow breaks unexpectedly
+echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] job exited unexpectedly (loop terminated)." >> "$LOG_FILE"

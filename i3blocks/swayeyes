@@ -1,0 +1,81 @@
+#!/usr/bin/env sh
+
+# --- Configuration ---
+# Absolute path to the service command
+SERVICE_CMD="/sbin/rc-service"
+SERVICE_NAME="swayeyes"
+
+# Notification command (use notify-send for standard notifications)
+NOTIFY_CMD="notify-send"
+
+# Icons
+ICON_RUNNING="" # FontAwesome eye-open
+ICON_STOPPED=""  # FontAwesome eye-slash
+
+# Pre-alert flag file path (MUST match swayeyes daemon script)
+PRE_ALERT_FILE="/tmp/swayeyes.pre_alert_active"
+
+# --- Helper Functions ---
+
+# Function to get current service status (returns "running" or "stopped")
+get_swayeyes_status() {
+    "$SERVICE_CMD" -U "$SERVICE_NAME" status >/dev/null 2>&1
+    local status_code=$?
+
+    if [ "$status_code" -eq 0 ]; then
+        echo "running"
+    else
+        echo "stopped"
+    fi
+}
+
+# Function to print the icon and status
+print_block_output() {
+    local current_state=$(get_swayeyes_status)
+    # Check for pre-alert first if service is running
+    if [ "$current_state" = "running" ] && [ -f "$PRE_ALERT_FILE" ]; then
+        echo "$ICON_RUNNING"
+        echo "" # empty
+        echo "#FFA500" # Orange for warning
+    elif [ "$current_state" = "running" ]; then
+        echo "$ICON_RUNNING"
+        # echo "" # empty
+        # echo "#00FF00" # Green for running
+    else
+        echo "$ICON_STOPPED"
+        echo "" # empty
+        echo "#FF0000" # Red for stopped
+    fi
+    # The full status string (useful for tooltips if i3blocks shows them)
+    # echo "RSI: $(current_state)"
+}
+
+# Function to handle button clicks
+handle_button() {
+    case "$BLOCK_BUTTON" in
+
+        1) # Left click: Display a more detailed status notification
+            pkill -RTMIN+3 i3blocks
+            local current_state=$(get_swayeyes_status)
+            if [ "$current_state" = "running" ]; then
+                local next_blank_time=$("$SERVICE_CMD" -U "$SERVICE_NAME" status | head -n 1)
+                "$NOTIFY_CMD" "$next_blank_time"
+            else
+                "$NOTIFY_CMD" "RSI Status" "Stopped."
+            fi
+            ;;
+        2) ( toggle_swayeyes ) > /dev/null ;;
+    esac
+}
+
+# --- Main execution ---
+
+# Run the button handler in the background if a button was clicked
+# This prevents the i3blocks script from hanging while handling the click
+handle_button &
+
+# Print the icon and status to i3blocks
+print_block_output
+
+# Exit with 0 to indicate success to i3blocks (prevent error messages in bar)
+exit 0

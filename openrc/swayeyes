@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+
+description="Screen blanker service for Sway to protect your eyes"
+command="$HOME/.local/bin/swayeyes start"
+
+supervisor=supervise-daemon
+error_logger="logger -t '${RC_SVCNAME}' -p daemon.error"
+
+depends() {
+	use dbus
+}
+
+status() {
+     $HOME/.local/bin/swayeyes status
+}
