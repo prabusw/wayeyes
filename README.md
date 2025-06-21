@@ -17,17 +17,16 @@ It is recommended to use a service manager like openRC to run this
 tool. A systemd user service can be created based on the OpenRC script.
 
 
-Steps to get the tool working: (step 4 onwards is optional)
+After downloading the repo, follow these steps to get the tool working: (step 5 onwards optional)
 
-1. Download the repo.
-2. Place the main scripts(swayeyes and toggle_swayeyes in the folder:  $HOME/.local/bin
-3. Copy the OpenRC user service script(openrc/swayeyes) to the folder: $HOME/.config/rc/init.d
-4. Please update the service commands in toggle_swayeyes script.
-5. Create a shortcut in the sway config file: $HOME/.config/sway/config
-6. If using i3blocks, copy the i3blocks script(i3blocks/swayeyes) to the folder: $HOME/.local/bin/i3blocks
-7. Add an entry for swayeeys in i3blocks config file at $HOME/.config/i3blocks/config
-8. Add relevent entries in your notification daemon to handle the notifications.
-9. Add the necessary service management commands to manage suspend/resume events: $HOME/.local/bin/tofi-exit
+1. Place the main scripts(swayeyes and toggle_swayeyes in the folder:  $HOME/.local/bin
+2. Copy the OpenRC user service script(openrc/swayeyes) to the folder: $HOME/.config/rc/init.d
+3. Please update the service commands in toggle_swayeyes script.
+4. Create a shortcut in the sway config file: $HOME/.config/sway/config
+5. If using i3blocks, copy the i3blocks script(i3blocks/swayeyes) to the folder: $HOME/.local/bin/i3blocks
+6. Add an entry for swayeeys in i3blocks config file at $HOME/.config/i3blocks/config
+7. Add relevent entries in your notification daemon to handle the notifications.
+8. Add the necessary service management commands to manage suspend/resume events: $HOME/.local/bin/tofi-exit
 
 Refer to my [dotiles](https://git.sr.ht/~prabuanand/dotfiles) for how
 this tool is used on Alpine Linux, where it has been integrated with
