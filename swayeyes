@@ -69,6 +69,16 @@ update_next_blank_epoch() {
     echo "$1" > "$NEXT_BLANK_FILE"
 }
 
+# Function to postpone the next blanking time
+postpone_blanking() {
+    if [ -f "$NEXT_BLANK_FILE" ]; then
+        now=$(date +%s)
+        new_next=$(( now + BLANKING_INTERVAL ))
+        echo "$new_next" > "$NEXT_BLANK_FILE"
+        echo "$(date) ["$SERVICE_NAME"_daemon] Postponed next blanking to $(date -d "@$new_next")" >> "$LOG_FILE"
+    fi
+}
+
 # --- NEW: Pre-alert check function ---
 # Returns 0 (true) if current time is within PRE_ALERT_SECONDS of NEXT_BLANK_EPOCH,
 # and PRE_ALERT_FILE is not yet created for this cycle.
@@ -157,7 +167,7 @@ main_loop() {
         i=$((i+1)) # Increment loop counter
 
         # Determine break type and send pre-blanking notification
-        if [ $((i % 5)) -eq 0 ]; then # Every 5th cycle is a long break
+        if [ $((i % 4)) -eq 0 ]; then # Every 4th cycle is a long break
             send_notification "Time to rest your eyes by taking a long break"
             CURRENT_BREAK_DURATION=$L_BREAK
         else # Other cycles are short breaks
@@ -198,6 +208,9 @@ case "$1" in
         ;;
     status)
         check_status
+        ;;
+    postpone)
+        postpone_blanking
         ;;
     *)
         echo "Usage: $0 start | status"
