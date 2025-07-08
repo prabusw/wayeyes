@@ -1,15 +1,14 @@
 #!/usr/bin/env sh
 
-# Define log file and next blanking time file
-SERVICE_NAME="swayeyes" # Name used in logfiles
-
 # Log File Configuration
+SERVICE_NAME="swayeyes" # Name used in logfiles
 LOG_DIR="$HOME/.local/share/$SERVICE_NAME/logs" # Persistent user-specific log directory
 LOG_FILE="$LOG_DIR/swayeyes.log"               # Log file path
 
 # Temporary File Configuration
 NEXT_BLANK_FILE="/tmp/swayeyes.next"
 PRE_ALERT_FILE="/tmp/swayeyes.pre_alert_active" # Flag file to indicate pre-alert is active for i3blocks
+COUNT_FILE="/tmp/swayeyes.count"
 
 # Break and Interval Settings
 S_BREAK=20 # Short break duration in seconds
@@ -51,11 +50,10 @@ send_notification() {
     fi
 }
 # Trap for graceful exit when stopped by OpenRC (sending SIGTERM) or by Ctrl+C (SIGINT).
-# A message is logged and the script exits
 cleanup() {
     # The shell automatically passes the name of the signal that triggered the trap as the first argument ($1).
     local TRIGGERING_SIGNAL="$1" # Store it in a local variable for clarity in the message
-    rm -f "$NEXT_BLANK_FILE" "$PRE_ALERT_FILE"
+    rm -f "$NEXT_BLANK_FILE" "$PRE_ALERT_FILE" "COUNT_FILE"
     echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] $SERVICE_NAME terminated by $TRIGGERING_SIGNAL. Cleaned up temporary files." >> "$LOG_FILE"
     # Add any other necessary cleanup here
     exit 0 # It's good practice to exit after cleanup
@@ -69,13 +67,20 @@ update_next_blank_epoch() {
     echo "$1" > "$NEXT_BLANK_FILE"
 }
 
+# Function to update the count file
+update_count() {
+    echo "$1" > "$COUNT_FILE"
+}
+
 # Function to postpone the next blanking time
 postpone_blanking() {
     if [ -f "$NEXT_BLANK_FILE" ]; then
         now=$(date +%s)
         new_next=$(( now + BLANKING_INTERVAL ))
+        i=0
+        echo "$i" > "$COUNT_FILE"
         echo "$new_next" > "$NEXT_BLANK_FILE"
-        echo "$(date) ["$SERVICE_NAME"_daemon] Postponed next blanking to $(date -d "@$new_next")" >> "$LOG_FILE"
+        echo "$(date) ["$SERVICE_NAME"_daemon] Cleared counter and postponed next blanking to $(date -d "@$new_next")" >> "$LOG_FILE"
     fi
 }
 
@@ -127,6 +132,7 @@ daemon_start() {
     # --- Initial setup for the first blanking time ---
     # Calculate the epoch timestamp for the first blanking (current time + 15 minutes)
     INITIAL_BLANK_EPOCH=$(( $(date +%s) + $BLANKING_INTERVAL ))
+    update_count "$i"
     update_next_blank_epoch "$INITIAL_BLANK_EPOCH"
     echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] Initial blanking scheduled for $(date -d "@$INITIAL_BLANK_EPOCH" +"%H:%M:%S %Z")." >> "$LOG_FILE"
     # Clean up pre-alert file on startup to ensure a fresh state
@@ -137,12 +143,14 @@ daemon_start() {
 main_loop() {
     CURRENT_EPOCH=$(date +%s)
     NEXT_BLANK_EPOCH=$(cat "$NEXT_BLANK_FILE" 2>/dev/null) # Read target from file
-
+    i=$(cat "$COUNT_FILE" 2>/dev/null) # Read count from file
     # Defensive check: If file is empty or invalid, recalculate next blanking based on current time
     if [ -z "$NEXT_BLANK_EPOCH" ] || [ "$NEXT_BLANK_EPOCH" -le 0 ]; then
         echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] ERROR: Blanking time file invalid. Resetting timer." >> "$LOG_FILE"
         NEXT_BLANK_EPOCH=$(( CURRENT_EPOCH + $BLANKING_INTERVAL ))
         update_next_blank_epoch "$NEXT_BLANK_EPOCH"
+        i=0
+        update_count "$i"
     fi
 
     # --- Pre-alert logic within the main loop ---
@@ -192,6 +200,7 @@ main_loop() {
         # This calculates 15 minutes from NOW, not from the previous blanking time.
         NEXT_BLANK_EPOCH=$(( $(date +%s) + $BLANKING_INTERVAL ))
         update_next_blank_epoch "$NEXT_BLANK_EPOCH"
+        update_count "$i"
         echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] Next blanking scheduled for $(date -d "@$NEXT_BLANK_EPOCH" +"%H:%M:%S %Z")." >> "$LOG_FILE"
 
     else
@@ -218,4 +227,4 @@ case "$1" in
         ;;
 esac
 # This line would only be reached if the while loop somehow breaks unexpectedly
-echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] job exited unexpectedly (loop terminated)." >> "$LOG_FILE"
+echo "$(date) ["$SERVICE_NAME"_daemon] while loop exited unexpectedly." >> "$LOG_FILE"
