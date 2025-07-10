@@ -13,13 +13,16 @@ The tool currently has the following features:
 * Screen blanking can be paused or resumed.
 * Provides an icon in the bar, when used with i3blocks.
 
-Follow these steps to get the tool working in OpenRC user service
-setup:
+Here are the common steps to get the tool working:
 
-- Place the scripts swayeyes and toggle_swayeyes in your path.
+- Place the executable script swayeyes in your path.
+- Choose the relevent toggle_swayeyes script and place it in your
+  path.
 - Verify and update the path for scripts, if required.
 - Amend sway config file to add toggle_swayeyes shortcut.
-- If using i3blocks, use the available i3blocks script.
+- Use the available i3blocks script, if required.
+
+Here are the steps to use with OpenRC user service:
 - OpenRC user service requires the service file to be in
   ~/.config/rc/init.d/swayeyes
 - rc-update -U add swayeyes
@@ -31,7 +34,7 @@ Here are the steps to use with systemd:
 - systemctl --user start swayeyes.service
 
 Refer to my [dotiles](https://git.sr.ht/~prabuanand/dotfiles) for how
-this tool is used in Alpine Linux, where it integrated with OpenRC,
+this tool is used in Alpine Linux, where it integrated with OpenRC and
 [i3blocks](https://github.com/vivien/i3blocks), a status provider for
 swaybar.
 
