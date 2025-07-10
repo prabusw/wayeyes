@@ -21,7 +21,7 @@ BLANKING_INTERVAL=900 # Interval between blanking events in seconds
 # Pre-alert settings
 PRE_ALERT_SECONDS=60 # Trigger notification 60 seconds before blanking
 
-# i3blocks Integration. Uncomment or modify if needed
+# i3blocks Integration. Modify if needed
 I3BLOCKS_SIGNAL=3 # Ensure this matches the 'signal=' in your i3blocks config for 'swayeyes'
 
 # Global setup and checks
@@ -50,6 +50,7 @@ send_notification() {
         echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] $message (notify-send not found)" >> "$LOG_FILE"
     fi
 }
+
 # Trap for graceful exit when stopped by OpenRC (sending SIGTERM) or by Ctrl+C (SIGINT).
 cleanup() {
     # The shell automatically passes the name of the signal that triggered the trap as the first argument ($1).
@@ -93,7 +94,7 @@ detect_time_jump() {
     echo "$CURRENT_EPOCH" > "$LAST_LOOP_TIME_FILE"
 }
 
-# Function to update the next blanking time file and stores the epoch timestamp of the next blanking event
+# Function to update the next blanking time file
 update_next_blank_epoch() {
     echo "$1" > "$NEXT_BLANK_FILE"
 }
@@ -103,10 +104,8 @@ update_count() {
     echo "$1" > "$COUNT_FILE"
 }
 
-# --- NEW: Pre-alert check function ---
-# Returns 0 (true) if current time is within PRE_ALERT_SECONDS of NEXT_BLANK_EPOCH,
-# and PRE_ALERT_FILE is not yet created for this cycle.
-# Returns 1 (false) otherwise.
+# Pre-alert check function Returns 0 (true) if current time is within
+# PRE_ALERT_SECONDS of NEXT_BLANK_EPOCH, Returns 1 (false) otherwise.
 pre_alert_check() {
     local current_epoch=$(date +%s)
     local next_blank_epoch=$(cat "$NEXT_BLANK_FILE" 2>/dev/null)
@@ -125,8 +124,8 @@ pre_alert_check() {
         return 1 # False: not within pre-alert window
     fi
 }
-# -------------------------------------
-# --- Handle status argument ---
+
+# Function to handle status argument
 check_status() {
     if [ -f "$NEXT_BLANK_FILE" ]; then
         next_epoch=$(cat "$NEXT_BLANK_FILE")
@@ -143,8 +142,7 @@ check_status() {
     fi
 }
 
-# ---------------------------
-# --- Schedule NEXT blanking time
+# Function to schedule NEXT blanking time
 schedule_blank() {
         # Calculate the blanking time as 15 minutes from NOW
         NEXT_BLANK_EPOCH=$(( $(date +%s) + $BLANKING_INTERVAL ))
@@ -152,7 +150,6 @@ schedule_blank() {
         update_count "$i"
         echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] Blanking scheduled for $(date -d "@$NEXT_BLANK_EPOCH" +"%H:%M:%S %Z")." >> "$LOG_FILE"
 }
-
 
 daemon_start() {
     # Initial log and notification when the daemon starts
@@ -163,6 +160,7 @@ daemon_start() {
     pkill -RTMIN+"$I3BLOCKS_SIGNAL" i3blocks # Update i3blocks to clear any lingering pre-alert icon
     schedule_blank
 }
+
 # Main loop for screen blanking with polling for time
 main_loop() {
     NEXT_BLANK_EPOCH=$(cat "$NEXT_BLANK_FILE" 2>/dev/null) # Read target from file
@@ -178,7 +176,7 @@ main_loop() {
     # Detect time jumps or system resume
     detect_time_jump
 
-    # --- Pre-alert logic within the main loop ---
+    # Pre-alert logic within the main loop
     if pre_alert_check; then
         if [ ! -f "$PRE_ALERT_FILE" ]; then # Check if the pre-alert hasn't been triggered for this cycle yet
             # Create the file to mark alert as shown for this cycle and Signal i3blocks to change icon
@@ -193,7 +191,7 @@ main_loop() {
             pkill -RTMIN+"$I3BLOCKS_SIGNAL" i3blocks # Signal i3blocks to revert icon
         fi
     fi
-    # --------------------------------------------------
+
     # Check if it's time to blank the screen
     if [ "$CURRENT_EPOCH" -ge "$NEXT_BLANK_EPOCH" ]; then
         i=$((i+1)) # Increment loop counter
