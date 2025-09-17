@@ -1,8 +1,8 @@
 #  swayeyes - Lightweight tool for Sway to prevent eye strain
 
-Swayeyes is a lightweight tool for [Sway](https://swaywm.org/) aimed
-at preventing eye strain. This shell script needs to be used with a
-service manager like OpenRC or systemd.
+Swayeyes is a lightweight tool preventing eye strain for
+[Sway](https://swaywm.org/). This shell script can be used either as a
+standalone tool or used with a service manager like OpenRC or systemd.
 
 The tool currently has the following features:
 
@@ -10,24 +10,23 @@ The tool currently has the following features:
 * Pre-blanking notification alerts.
 * Handles time jumps caused by suspend/resume.
 * Detailed logging.
-* Screen blanking can be paused or resumed.
-* Provides an icon in the bar, when used with i3blocks.
+* Toggle option available to pause and resume the script.
 
-Here are the common steps to get the tool working:
+Here are the steps to get the tool working:
 
 - Place the executable script swayeyes in your path.
-- Choose the relevent toggle_swayeyes script and place it in your
-  path.
 - Verify and update the path for scripts, if required.
-- Amend sway config file to add toggle_swayeyes shortcut.
+- Amend sway config file to add "swayeyes toggle" shortcut.
 - Use the available i3blocks script, if required.
 
-Here are the steps to use with OpenRC user service:
+Here are the steps to use with OpenRC user service as tested in Alpine
+Linux v3.22:
 - OpenRC user service requires the service file to be in
   ~/.config/rc/init.d/swayeyes
 - rc-update -U add swayeyes
 
-Here are the steps to use with systemd:
+I have not tested the systemd script. Here are the steps to use with
+systemd:
 - Place the service file in ~/.config/systemd/user/swayeyes.service
 - systemctl --user daemon-reload
 - systemctl --user enable swayeyes.service

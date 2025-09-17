@@ -5,6 +5,9 @@
 SERVICE_CMD="/sbin/rc-service"
 SERVICE_NAME="swayeyes"
 
+# Path to swayeyes script
+SWAYEYES_SCRIPT="$HOME/.local/bin/swayeyes"
+
 # Notification command (use notify-send for standard notifications)
 NOTIFY_CMD="notify-send"
 
@@ -13,7 +16,8 @@ ICON_RUNNING="" # FontAwesome eye-open
 ICON_STOPPED=""  # FontAwesome eye-slash
 
 # Pre-alert flag file path (MUST match swayeyes daemon script)
-PRE_ALERT_FILE="/tmp/swayeyes.pre_alert_active"
+PRE_ALERT_FILE="${XDG_RUNTIME_DIR:-/tmp}/swayeyes.pre_alert"
+
 
 # --- Helper Functions ---
 
@@ -58,13 +62,13 @@ handle_button() {
             pkill -RTMIN+3 i3blocks
             local current_state=$(get_swayeyes_status)
             if [ "$current_state" = "running" ]; then
-                local next_blank_time=$("$SERVICE_CMD" -U "$SERVICE_NAME" status | head -n 1)
-                "$NOTIFY_CMD" "$next_blank_time"
+                local status_info=$("$SWAYEYES_SCRIPT" status 2>/dev/null)
+                "$NOTIFY_CMD" "$status_info"
             else
-                "$NOTIFY_CMD" "RSI Status" "Stopped."
+                "$NOTIFY_CMD" "Stopped."
             fi
             ;;
-        2) ( toggle_swayeyes ) > /dev/null ;;
+        2) ( "$SWAYEYES_SCRIPT" toggle ) > /dev/null ;;
     esac
 }
 

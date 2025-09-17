@@ -1,241 +1,330 @@
 #!/usr/bin/env sh
 
-# Log File Configuration
-SERVICE_NAME="swayeyes" # Name used in logfiles
-LOG_DIR="$HOME/.local/share/$SERVICE_NAME/logs" # Persistent user-specific log directory
-LOG_FILE="$LOG_DIR/swayeyes.log"               # Log file path
+# RSI Eye Care Script - Simple version with suspend/resume detection
+# Usage: swayeyes [start|stop|status|toggle]
 
-# Temporary File Configuration
-NEXT_BLANK_FILE="/tmp/swayeyes.next"
-COUNT_FILE="/tmp/swayeyes.count"
-PRE_ALERT_FILE="/tmp/swayeyes.pre_alert_active" # Flag file to indicate pre-alert is active for i3blocks
-LAST_LOOP_TIME_FILE="/tmp/swayeyes.last_loop"
+SERVICE_NAME="swayeyes"
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/$SERVICE_NAME"
+LOG_FILE="$LOG_DIR/swayeyes.log"
 
-# Break and Interval Settings
-S_BREAK=20 # Short break duration in seconds
-L_BREAK=60 # Long break duration in seconds
-i=0 # Loop counter
-POLLING_INTERVAL=10 # Check time for blanking in seconds
-BLANKING_INTERVAL=900 # Interval between blanking events in seconds
+# Runtime files
+PID_FILE="$RUNTIME_DIR/$SERVICE_NAME.pid"
+NEXT_BLANK_FILE="$RUNTIME_DIR/$SERVICE_NAME.next"
+COUNT_FILE="$RUNTIME_DIR/$SERVICE_NAME.count"
+PRE_ALERT_FILE="$RUNTIME_DIR/$SERVICE_NAME.pre_alert"
+LAST_LOOP_TIME_FILE="$RUNTIME_DIR/$SERVICE_NAME.last_loop"
 
-# Pre-alert settings
-PRE_ALERT_SECONDS=60 # Trigger notification 60 seconds before blanking
+# Settings
+SHORT_BREAK=20
+LONG_BREAK=60
+INTERVAL=900        # 15 minutes between breaks
+PRE_ALERT=60       # 1 minute warning
+POLL_INTERVAL=10   # Check every 10 seconds
+I3BLOCKS_SIGNAL=3  # Signal for i3blocks
 
-# i3blocks Integration. Modify if needed
-I3BLOCKS_SIGNAL=3 # Ensure this matches the 'signal=' in your i3blocks config for 'swayeyes'
+# Create directories
+mkdir -p "$LOG_DIR" "$RUNTIME_DIR"
 
-# Global setup and checks
+# Logging function
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [$SERVICE_NAME] $*" >> "$LOG_FILE"
+}
 
-# Create log directory (must be before any logging attempts)
-mkdir -p "$LOG_DIR" || { echo "$(date) ["$SERVICE_NAME"] [PID=$$] ERROR: Failed to create log directory: $LOG_DIR. Exiting." >&2; exit 1; }
-
-# Ensure SWAYSOCK is set for swaymsg
-export SWAYSOCK=$(find /run/user/$(id -u) -type s -name 'sway-ipc.*' 2>/dev/null | head -n 1)
-if [ -z "$SWAYSOCK" ]; then
-    echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] ERROR: SWAYSOCK environment variable not set. Sway commands will likely fail. Check if Sway running?" >> "$LOG_FILE"
-    notify-send "Failed to start SERVICE_NAME. Check logs at $LOG_FILE"
-    # The program will exit here as swaymsg function is critical.
-    exit 1
-fi
-
-# Helper Function for Notifications
-send_notification() {
-    local message="$1"
-    local app_name="RSI"
-
-    # Check if notify-send is available before trying to execute it
+# Notification function
+notify() {
     if command -v notify-send >/dev/null 2>&1; then
-        notify-send -a "$app_name" "$message"
-    else
-        echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] $message (notify-send not found)" >> "$LOG_FILE"
+        notify-send "$*"
     fi
+    log "NOTIFY: $*"
 }
 
-# Trap for graceful exit when stopped by OpenRC (sending SIGTERM) or by Ctrl+C (SIGINT).
+notify_break() {
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send -a "RSI" "$*"
+    fi
+    log "NOTIFY: $*"
+}
+
+# Signal i3blocks to update
+signal_i3blocks() {
+    pkill -RTMIN+$I3BLOCKS_SIGNAL i3blocks 2>/dev/null
+}
+
+# Check if Sway is running and set SWAYSOCK
+setup_sway() {
+    if [ -z "$SWAYSOCK" ]; then
+        SWAYSOCK=$(find /run/user/$(id -u) -type s -name 'sway-ipc.*' 2>/dev/null | head -n 1)
+        export SWAYSOCK
+    fi
+
+    if [ -z "$SWAYSOCK" ] || ! swaymsg -t get_version >/dev/null 2>&1; then
+        log "ERROR: Cannot connect to Sway"
+        return 1
+    fi
+    return 0
+}
+
+# Cleanup function
 cleanup() {
-    # The shell automatically passes the name of the signal that triggered the trap as the first argument ($1).
-    local TRIGGERING_SIGNAL="$1" # Store it in a local variable for clarity in the message
-
-    # Clean up all other temporary files
-    rm -f "$NEXT_BLANK_FILE" "$PRE_ALERT_FILE" "$COUNT_FILE" "$LAST_LOOP_TIME_FILE"
-
-    echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] $SERVICE_NAME terminated by $TRIGGERING_SIGNAL. Cleaned up temporary files." >> "$LOG_FILE"
-    # Add any other necessary cleanup here
-    exit 0 # It's good practice to exit after cleanup
+    rm -f "$PID_FILE" "$NEXT_BLANK_FILE" "$COUNT_FILE" "$PRE_ALERT_FILE" "$LAST_LOOP_TIME_FILE"
+    signal_i3blocks
+    log "Cleanup completed"
 }
-trap 'cleanup "SIGINT"' SIGINT
-trap 'cleanup "SIGTERM"' SIGTERM
-trap 'cleanup "SIGHUP"' SIGHUP
 
+# Handle signals
+trap 'cleanup; exit 0' INT TERM HUP
 
-# Track Time Deltas to Detect Time Jumps (e.g., suspend/resume)
+# Check if already running
+is_running() {
+    [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null
+}
+
+# Get status information
+get_status() {
+    if ! is_running; then
+        echo "swayeyes not running"
+        return 1
+    fi
+
+    if [ -f "$NEXT_BLANK_FILE" ]; then
+        next_time=$(cat "$NEXT_BLANK_FILE")
+        if [ -n "$next_time" ] && [ "$next_time" -gt 0 ] 2>/dev/null; then
+            echo "Next break at $(date -d "@$next_time" '+%H:%M:%S')"
+            return 0
+        fi
+    fi
+
+    echo "Running but status unclear"
+    return 0
+}
+
+# Time jump detection for suspend/resume handling
 detect_time_jump() {
-    CURRENT_EPOCH=$(date +%s)
+    current_epoch=$(date +%s)
 
     # Check if last loop time file exists
     if [ -f "$LAST_LOOP_TIME_FILE" ]; then
-        LAST_EPOCH=$(cat "$LAST_LOOP_TIME_FILE")
+        last_epoch=$(cat "$LAST_LOOP_TIME_FILE")
 
-        # Calculate delta
-        DELTA=$(( CURRENT_EPOCH - LAST_EPOCH ))
+        # Calculate time delta
+        delta=$((current_epoch - last_epoch))
 
-        # If the delta is unusually large (i.e., system resumed or time jump)
-        if [ "$DELTA" -gt $(( 9 * POLLING_INTERVAL )) ]; then
-            # Reset blanking time if a large jump is detected
-            echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] Time jump of $DELTA seconds detected. Resetting blanking schedule." >> "$LOG_FILE"
-            i=0
-            schedule_blank
+        # If delta is unusually large (more than 9x polling interval), likely a suspend/resume
+        if [ "$delta" -gt $((9 * POLL_INTERVAL)) ]; then
+            log "Time jump of ${delta}s detected (suspend/resume?). Resetting break schedule."
+
+            # Reset break timer - schedule next break from current time
+            schedule_break 0
+
+            # Clear pre-alert state
             rm -f "$PRE_ALERT_FILE"
-            pkill -RTMIN+"$I3BLOCKS_SIGNAL" i3blocks
+            signal_i3blocks
+
+            # Notify user about reset
+            notify "System resumed - break timer reset"
+
+            # Store current time for next check
+            echo "$current_epoch" > "$LAST_LOOP_TIME_FILE"
+            return 0  # Time jump detected
         fi
     fi
 
-    # Store current time for next delta check
-    echo "$CURRENT_EPOCH" > "$LAST_LOOP_TIME_FILE"
+    # Store current time for next check
+    echo "$current_epoch" > "$LAST_LOOP_TIME_FILE"
+    return 1  # No time jump
 }
 
-# Function to update the next blanking time file
-update_next_blank_epoch() {
-    echo "$1" > "$NEXT_BLANK_FILE"
+# Schedule next break
+schedule_break() {
+    next_time=$(($(date +%s) + INTERVAL))
+    echo "$next_time" > "$NEXT_BLANK_FILE"
+    count=${1:-0}
+    echo "$count" > "$COUNT_FILE"
+    log "Next break scheduled for $(date -d "@$next_time" '+%H:%M:%S')"
 }
 
-# Function to update the count file
-update_count() {
-    echo "$1" > "$COUNT_FILE"
-}
-
-# Pre-alert check function Returns 0 (true) if current time is within
-# PRE_ALERT_SECONDS of NEXT_BLANK_EPOCH, Returns 1 (false) otherwise.
-pre_alert_check() {
-    local current_epoch=$(date +%s)
-    local next_blank_epoch=$(cat "$NEXT_BLANK_FILE" 2>/dev/null)
-
-    # Basic validation for next_blank_epoch
-    if [ -z "$next_blank_epoch" ] || [ "$next_blank_epoch" -le 0 ]; then
-        return 1 # Not valid to check pre-alert
+# Main daemon loop
+run_daemon() {
+    if is_running; then
+        echo "Already running (PID: $(cat "$PID_FILE"))"
+        return 1
     fi
 
-    local pre_alert_start_epoch=$(( next_blank_epoch - PRE_ALERT_SECONDS ))
-
-    # Check if we are in the pre-alert window
-    if [ "$current_epoch" -ge "$pre_alert_start_epoch" ] && [ "$current_epoch" -lt "$next_blank_epoch" ]; then
-        return 0 # True: within pre-alert window
-    else
-        return 1 # False: not within pre-alert window
+    if ! setup_sway; then
+        echo "Failed to setup Sway connection"
+        return 1
     fi
-}
 
-# Function to handle status argument
-check_status() {
-    if [ -f "$NEXT_BLANK_FILE" ]; then
-        next_epoch=$(cat "$NEXT_BLANK_FILE")
-        if [ -n "$next_epoch" ] && [ "$next_epoch" -gt 0 ] 2>/dev/null; then
-            echo "Next screen blanking at: $(date -d "@$next_epoch" +"%H:%M:%S %Z")"
-            exit 0 # Service is running and valid: return 0
+    echo $$ > "$PID_FILE"
+    log "Started (PID: $$)"
+    notify "$SERVICE_NAME started"
+
+    # Initialize
+    count=0
+    schedule_break "$count"
+    rm -f "$PRE_ALERT_FILE" "$LAST_LOOP_TIME_FILE"
+    signal_i3blocks
+
+    while true; do
+        # Detect suspend/resume events first
+        if detect_time_jump; then
+            # Time jump detected, schedule already reset, continue to next iteration
+            sleep "$POLL_INTERVAL"
+            continue
+        fi
+
+        current_time=$(date +%s)
+        next_time=$(cat "$NEXT_BLANK_FILE" 2>/dev/null || echo 0)
+        count=$(cat "$COUNT_FILE" 2>/dev/null || echo 0)
+
+        # Handle invalid next_time (defensive check)
+        if [ -z "$next_time" ] || [ "$next_time" -le 0 ]; then
+            log "Invalid next_time, rescheduling"
+            schedule_break "$count"
+            sleep "$POLL_INTERVAL"
+            continue
+        fi
+
+        # Pre-alert check
+        pre_alert_time=$((next_time - PRE_ALERT))
+        if [ "$current_time" -ge "$pre_alert_time" ] && [ "$current_time" -lt "$next_time" ]; then
+            if [ ! -f "$PRE_ALERT_FILE" ]; then
+                touch "$PRE_ALERT_FILE"
+                signal_i3blocks
+                log "Pre-alert triggered"
+            fi
         else
-            echo "Invalid time in $NEXT_BLANK_FILE. Service might not be running correctly."
-            exit 1 # File exists but content is bad: return 1
+            if [ -f "$PRE_ALERT_FILE" ]; then
+                rm -f "$PRE_ALERT_FILE"
+                signal_i3blocks
+            fi
         fi
-    else
-        echo "Screen blanking not scheduled (file $NEXT_BLANK_FILE not found)."
-        exit 1 # Service is stopped (file not found): return 1
-    fi
-}
 
-# Function to schedule NEXT blanking time
-schedule_blank() {
-        # Calculate the blanking time as 15 minutes from NOW
-        NEXT_BLANK_EPOCH=$(( $(date +%s) + $BLANKING_INTERVAL ))
-        update_next_blank_epoch "$NEXT_BLANK_EPOCH"
-        update_count "$i"
-        echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] Blanking scheduled for $(date -d "@$NEXT_BLANK_EPOCH" +"%H:%M:%S %Z")." >> "$LOG_FILE"
-}
+        # Break time check
+        if [ "$current_time" -ge "$next_time" ]; then
+            count=$((count + 1))
 
-daemon_start() {
-    # Initial log and notification when the daemon starts
-    echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] swayeyes started." >> "$LOG_FILE"
+            # Determine break type and send notification
+            if [ $((count % 4)) -eq 0 ]; then
+                break_duration=$LONG_BREAK
+                notify_break "Time for a long break! Look away from the screen."
+            else
+                break_duration=$SHORT_BREAK
+                notify_break "Time for a short break! Rest your eyes."
+            fi
 
-    # Clean up pre-alert file on startup to ensure a fresh state
-    rm -f "$PRE_ALERT_FILE"
-    pkill -RTMIN+"$I3BLOCKS_SIGNAL" i3blocks # Update i3blocks to clear any lingering pre-alert icon
-    schedule_blank
-}
+            sleep 2  # Allow notification to show
 
-# Main loop for screen blanking with polling for time
-main_loop() {
-    NEXT_BLANK_EPOCH=$(cat "$NEXT_BLANK_FILE" 2>/dev/null) # Read target from file
-    i=$(cat "$COUNT_FILE" 2>/dev/null) # Read count from file
+            # Blank screen
+            swaymsg "output * dpms off"
+            log "Screen blanked for ${break_duration}s (break #$count)"
 
-    # Defensive check: If file is empty or invalid, recalculate next blanking based on current time
-    if [ -z "$NEXT_BLANK_EPOCH" ] || [ "$NEXT_BLANK_EPOCH" -le 0 ]; then
-        echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] ERROR: Blanking time file invalid. Resetting timer." >> "$LOG_FILE"
-        i=0
-        schedule_blank
-    fi
+            sleep "$break_duration"
 
-    # Detect time jumps or system resume
-    detect_time_jump
+            # Unblank screen
+            swaymsg "output * dpms on"
+            log "Screen unblanked"
 
-    # Pre-alert logic within the main loop
-    if pre_alert_check; then
-        if [ ! -f "$PRE_ALERT_FILE" ]; then # Check if the pre-alert hasn't been triggered for this cycle yet
-            # Create the file to mark alert as shown for this cycle and Signal i3blocks to change icon
-            touch "$PRE_ALERT_FILE" && pkill -RTMIN+"$I3BLOCKS_SIGNAL" i3blocks
-            echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] Pre-blanking alert triggered." >> "$LOG_FILE"
-        fi
-    else
-        # If not in pre-alert window, ensure the pre-alert file is removed
-        # This handles cases where time might jump, or after a blanking cycle.
-        if [ -f "$PRE_ALERT_FILE" ]; then
+            # Schedule next break
+            schedule_break "$count"
             rm -f "$PRE_ALERT_FILE"
-            pkill -RTMIN+"$I3BLOCKS_SIGNAL" i3blocks # Signal i3blocks to revert icon
+            signal_i3blocks
+        else
+            sleep "$POLL_INTERVAL"
         fi
+    done
+}
+
+# Stop daemon
+stop_daemon() {
+    if ! is_running; then
+        echo "Not running"
+        return 1
     fi
 
-    # Check if it's time to blank the screen
-    if [ "$CURRENT_EPOCH" -ge "$NEXT_BLANK_EPOCH" ]; then
-        i=$((i+1)) # Increment loop counter
+    pid=$(cat "$PID_FILE")
+    if kill "$pid" 2>/dev/null; then
+        # Wait for cleanup
+        i=0
+        while [ $i -lt 10 ] && is_running; do
+            sleep 1
+            i=$((i + 1))
+        done
 
-        # Determine break type and send pre-blanking notification
-        if [ $((i % 4)) -eq 0 ]; then # Every 4th cycle is a long break
-            send_notification "Time to rest your eyes by taking a long break"
-            CURRENT_BREAK_DURATION=$L_BREAK
-        else # Other cycles are short breaks
-            send_notification "Time to rest your eyes by taking a short break"
-            CURRENT_BREAK_DURATION=$S_BREAK
+        if is_running; then
+            kill -9 "$pid" 2>/dev/null
         fi
 
-        sleep 2 # Short pause before blanking allows notification to be seen
-
-        # Blank the screen
-        swaymsg "output * dpms off"
-        echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] [count=$i] screen blanked for ${CURRENT_BREAK_DURATION}s." >> "$LOG_FILE"
-
-        # Time the screen stays blank
-        sleep "$CURRENT_BREAK_DURATION"
-
-        # Unblank the screen
-        swaymsg "output * dpms on"
-        echo "$(date) ["$SERVICE_NAME"_daemon] [PID=$$] [count=$i] screen unblanked." >> "$LOG_FILE"
-        schedule_blank
+        cleanup
+        echo "Stopped"
+        log "Stopped"
     else
-        # Not time to blank yet
-        sleep "$POLLING_INTERVAL"
+        cleanup
+        echo "Process not found, cleaned up stale files"
     fi
 }
-case "$1" in
+
+# Toggle service
+toggle_service() {
+    if command -v rc-service >/dev/null 2>&1; then
+        # OpenRC
+        if rc-service -U "$SERVICE_NAME" status >/dev/null 2>&1; then
+            notify "$SERVICE_NAME stopping..."
+            rc-service -U "$SERVICE_NAME" stop
+            action="stopped"
+        else
+            notify "$SERVICE_NAME starting..."
+            rc-service -U "$SERVICE_NAME" start
+            action="started"
+        fi
+    elif command -v systemctl >/dev/null 2>&1; then
+        # systemd
+        if systemctl --user is-active "$SERVICE_NAME" >/dev/null 2>&1; then
+            notify "$SERVICE_NAME stopping..."
+            systemctl --user stop "$SERVICE_NAME"
+            action="stopped"
+        else
+            notify "$SERVICE_NAME starting..."
+            systemctl --user start "$SERVICE_NAME"
+            action="started"
+        fi
+    else
+        # Standalone toggle
+        if is_running; then
+            stop_daemon
+            action="stopped"
+        else
+            run_daemon &
+            action="started"
+        fi
+    fi
+
+    sleep 2
+    notify "$SERVICE_NAME $action"
+    signal_i3blocks
+}
+
+# Main command handling
+case "${1:-status}" in
     start)
-        daemon_start
-        while true; do
-            main_loop
-        done
+        run_daemon
+        ;;
+    stop)
+        stop_daemon
         ;;
     status)
-        check_status
-        exit 0 # Exit immediately after checking status
+        get_status
+        ;;
+    toggle)
+        toggle_service
         ;;
     *)
-        echo "Usage: $0 status"
+        echo "Usage: $0 {start|stop|status|toggle}"
+        echo "  start  - Start the daemon"
+        echo "  stop   - Stop the daemon"
+        echo "  status - Show current status"
+        echo "  toggle - Toggle via service manager or standalone"
         exit 1
         ;;
 esac
