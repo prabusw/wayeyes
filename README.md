@@ -24,12 +24,15 @@ Linux v3.22:
 - To use with OpenRC user service, place the service file in
   ~/.config/rc/init.d/swayeyes
 - Verify and update the path for scripts, if required.
-- Add swayeyes service using the command ```rc-update -U add swayeyes```
-
+- Add and start swayeyes service using the below commands:
+  ```
+  rc-update -U add swayeyes
+  rc-service -U start swayeyes
+  ```
 The systemd script has not been tested. Here are the steps to use with
 systemd:
 - Place the service file in ~/.config/systemd/user/swayeyes.service
-- Issue the following commands in sequence
+- Add and start the service using the below commands:
   ```
   systemctl --user daemon-reload
   systemctl --user enable swayeyes.service
