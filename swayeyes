@@ -337,7 +337,7 @@ case "${1:-usage}" in
 		help
 		;;
 	version)
-		echo "  swayeyes 0.3"
+		echo "  swayeyes v0.1.4"
 		echo "  Copyright (C) 2025-2025  Prabu Anand Kalivaradhan"
 		echo "  swayeyes comes with NO WARRANTY, to the extent permitted by law."
 		echo "  For more information, see the accompanying README.md file."
