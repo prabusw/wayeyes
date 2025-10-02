@@ -14,24 +14,24 @@ The tool currently has the following features:
 
 Here are the steps to get the tool working:
 
-- Place the executable script swayeyes in your path.
-- Verify and update the path for scripts, if required.
-- In sway config file add a keybind to "swayeyes toggle".
-- Use the available i3blocks script, if required.
+- Place the executable script swayeyes in $HOME/.local/bin/swayeyes
+  and ensure that it's in your $PATH
+- If the script location changes, update service and i3blocks scripts
+- In sway config file add a keybind to "swayeyes toggle"
+- Use the available i3blocks script, if required
 
 Here are the steps to use with OpenRC user service as tested in Alpine
 Linux v3.22:
-- To use with OpenRC user service, place the service file in
-  ~/.config/rc/init.d/swayeyes
-- Verify and update the path for scripts, if required.
+- Place the service file in $HOME/.config/rc/init.d/swayeyes
 - Add and start swayeyes service using the below commands:
   ```
   rc-update -U add swayeyes
   rc-service -U start swayeyes
   ```
+
 The systemd script has not been tested. Here are the steps to use with
 systemd:
-- Place the service file in ~/.config/systemd/user/swayeyes.service
+- Place the service file in $HOME/.config/systemd/user/swayeyes.service
 - Add and start the service using the below commands:
   ```
   systemctl --user daemon-reload
