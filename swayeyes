@@ -1,7 +1,6 @@
 #!/usr/bin/env sh
 
-# RSI Eye Care Script - Simple version with suspend/resume detection
-# Usage: swayeyes [start|stop|status|toggle]
+# An Eye Care Script for Sway
 
 SERVICE_NAME="swayeyes"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
@@ -305,8 +304,23 @@ toggle_service() {
     signal_i3blocks
 }
 
+usage(){
+	echo "Usage: $0 {start|stop|status|toggle|help|version}"
+    exit 1
+}
+help(){
+	echo "Usage: $0 {start|stop|status|toggle|help|version}"
+    echo "  start    - Start the daemon"
+    echo "  stop     - Stop the daemon"
+    echo "  status   - Show current status"
+    echo "  toggle   - Toggle via service manager or standalone"
+	echo "  help     - Show this help"
+	echo "  version  - Show version information"
+    exit 1
+}
+
 # Main command handling
-case "${1:-status}" in
+case "${1:-usage}" in
     start)
         run_daemon
         ;;
@@ -319,12 +333,18 @@ case "${1:-status}" in
     toggle)
         toggle_service
         ;;
+	help)
+		help
+		;;
+	version)
+		echo "  swayeyes 0.3"
+		echo "  Copyright (C) 2025-2025  Prabu Anand Kalivaradhan"
+		echo "  swayeyes comes with NO WARRANTY, to the extent permitted by law."
+		echo "  For more information, see the accompanying README.md file."
+		echo "  Home page: git.sr.ht/~prabuanand/swayeyes"
+		exit 1
+		;;
     *)
-        echo "Usage: $0 {start|stop|status|toggle}"
-        echo "  start  - Start the daemon"
-        echo "  stop   - Stop the daemon"
-        echo "  status - Show current status"
-        echo "  toggle - Toggle via service manager or standalone"
-        exit 1
-        ;;
+		usage
+		;;
 esac
