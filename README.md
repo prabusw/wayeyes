@@ -1,4 +1,4 @@
-#  swayeyes - Lightweight tool for Sway to prevent eye strain
+#  swayeyes - Lightweight tool to reduce eye strain for Sway
 
 Swayeyes is a lightweight tool to reduce eye strain for
 [Sway](https://swaywm.org/). This shell script can be used either as a
