@@ -11,6 +11,8 @@ The tool currently has the following features:
 * Handles time jumps caused by suspend/resume.
 * Detailed logging.
 * Toggle option available to pause and resume the script.
+* Supports [i3blocks](https://github.com/vivien/i3blocks), a status
+provider for swaybar.
 
 Here are the steps to get the tool working:
 
@@ -39,10 +41,9 @@ systemd:
   systemctl --user start swayeyes.service
   ```
 
-Refer to my [dotiles](https://git.sr.ht/~prabuanand/dotfiles) for how
-this tool is used in Alpine Linux, where it integrated with OpenRC and
-[i3blocks](https://github.com/vivien/i3blocks), a status provider for
-swaybar.
+Refer to my [dotiles](https://git.sr.ht/~prabuanand/dotfiles) to view
+how this tool is used in Alpine Linux, where it is integrated with
+OpenRC and i3blocks.
 
 
 Copyright (C) 2025-2025 Prabu Anand Kalivaradhan
