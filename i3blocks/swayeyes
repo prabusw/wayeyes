@@ -1,85 +1,70 @@
 #!/usr/bin/env sh
 
-# --- Configuration ---
-# Absolute path to the service command
-SERVICE_CMD="/sbin/rc-service"
-SERVICE_NAME="swayeyes"
+# Icons are FontAwesome eye-open & eye-slash
 
 # Path to swayeyes script
 SWAYEYES_SCRIPT="$HOME/.local/bin/swayeyes"
-
 # Notification command (use notify-send for standard notifications)
 NOTIFY_CMD="notify-send"
-
-# Icons
-ICON_RUNNING="" # FontAwesome eye-open
-ICON_STOPPED=""  # FontAwesome eye-slash
-
 # Pre-alert flag file path (MUST match swayeyes daemon script)
 PRE_ALERT_FILE="${XDG_RUNTIME_DIR:-/tmp}/swayeyes.pre_alert"
+swayeyes_status=$("$SWAYEYES_SCRIPT" status 2>/dev/null)
 
-
-# --- Helper Functions ---
-
-# Function to get current service status (returns "running" or "stopped")
 get_swayeyes_status() {
-    "$SERVICE_CMD" -U "$SERVICE_NAME" status >/dev/null 2>&1
-    local status_code=$?
-
-    if [ "$status_code" -eq 0 ]; then
-        echo "running"
-    else
-        echo "stopped"
-    fi
+	case "$swayeyes_status" in
+		"Next break at"*)
+			echo "running"
+			;;
+		*)
+			echo "stopped"
+			;;
+    esac
 }
 
 # Function to print the icon and status
-print_block_output() {
-    local current_state=$(get_swayeyes_status)
-    # Check for pre-alert first if service is running
-    if [ "$current_state" = "running" ] && [ -f "$PRE_ALERT_FILE" ]; then
-        echo "$ICON_RUNNING"
-        echo "" # empty
-        echo "#FFA500" # Orange for warning
-    elif [ "$current_state" = "running" ]; then
-        echo "$ICON_RUNNING"
-        # echo "" # empty
-        # echo "#00FF00" # Green for running
-    else
-        echo "$ICON_STOPPED"
-        echo "" # empty
-        echo "#FF0000" # Red for stopped
-    fi
-    # The full status string (useful for tooltips if i3blocks shows them)
-    # echo "RSI: $(current_state)"
+print_block() {
+    local current_state
+	local ICON TEXT COLOR
+	current_state=$(get_swayeyes_status)
+	# local status_output
+	# status_output=$("$SWAYEYES_SCRIPT" status 2>/dev/null)
+	case "$current_state" in
+		"running")
+			ICON=""
+			TEXT=""
+			COLOR=""
+			# COLOR="#00FF00" # Default Green
+			# Check for pre-alert first if service is running
+			if [ -f "$PRE_ALERT_FILE" ]; then
+				ICON=""
+				TEXT=""
+				COLOR="#FFA500" # Orange for warning
+			fi
+			;;
+		*)
+			ICON=""
+			TEXT="" # empty
+			COLOR="#FF0000" # Red for stopped
+			;;
+	esac
+# Print the three lines required by i3blocks
+    echo "$ICON"
+    echo "$TEXT"
+    echo "$COLOR"
 }
 
 # Function to handle button clicks
 handle_button() {
+	# Exit early if no button was pressed, which is the default behavior
+	[ -z "$BLOCK_BUTTON" ] && return 0
     case "$BLOCK_BUTTON" in
-
-        1) # Left click: Display a more detailed status notification
-            pkill -RTMIN+3 i3blocks
-            local current_state=$(get_swayeyes_status)
-            if [ "$current_state" = "running" ]; then
-                local status_info=$("$SWAYEYES_SCRIPT" status 2>/dev/null)
-                "$NOTIFY_CMD" "$status_info"
-            else
-                "$NOTIFY_CMD" "Stopped."
-            fi
-            ;;
-        2) ( "$SWAYEYES_SCRIPT" toggle ) > /dev/null ;;
+        1)  "$NOTIFY_CMD" "$swayeyes_status" && pkill -RTMIN+3 i3blocks ;;
+        2) "$SWAYEYES_SCRIPT" toggle && pkill -RTMIN+3 i3blocks ;;
     esac
 }
 
-# --- Main execution ---
-
-# Run the button handler in the background if a button was clicked
-# This prevents the i3blocks script from hanging while handling the click
-handle_button &
+# Handle the mouse button click, and all its output is discarded
+handle_button > /dev/null 2>&1
 
 # Print the icon and status to i3blocks
-print_block_output
-
-# Exit with 0 to indicate success to i3blocks (prevent error messages in bar)
-exit 0
+print_block
