@@ -1,0 +1,27 @@
+#!/usr/bin/env sh
+
+SERVICE_NAME="swayeyes"
+
+signal_i3blocks() {
+    pkill -RTMIN+3 i3blocks 2>/dev/null
+}
+
+if command -v rc-service >/dev/null 2>&1; then
+    if rc-service -U "$SERVICE_NAME" status >/dev/null 2>&1; then
+        rc-service -U "$SERVICE_NAME" stop
+    else
+        rc-service -U "$SERVICE_NAME" start
+    fi
+elif command -v systemctl >/dev/null 2>&1; then
+    if systemctl --user is-active "$SERVICE_NAME" >/dev/null 2>&1; then
+        systemctl --user stop "$SERVICE_NAME"
+    else
+        systemctl --user start "$SERVICE_NAME"
+    fi
+else
+    notify-send "$SERVICE_NAME" "No supported service manager found (OpenRC or systemd required)"
+    exit 1
+fi
+
+sleep 2
+signal_i3blocks

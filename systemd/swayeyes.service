@@ -5,8 +5,10 @@ Requires=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/swayeyes start
+Environment="XDG_RUNTIME_DIR=/run/user/%U"
+ExecStart=%h/.config/sway/scripts/swayeyes
 Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=graphical-session.target
