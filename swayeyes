@@ -140,7 +140,7 @@ case "${1:-}" in
         exit 0
         ;;
     version)
-        echo "  swayeyes 0.4"
+        echo "  swayeyes 0.5"
         echo "  Copyright (C) 2025-2026  Prabu Anand Kalivaradhan"
         echo "  swayeyes comes with NO WARRANTY, to the extent permitted by law."
         echo "  Home page: git.sr.ht/~prabuanand/swayeyes"
