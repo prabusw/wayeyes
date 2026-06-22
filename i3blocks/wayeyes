@@ -11,7 +11,7 @@ print_block() {
     case "$wayeyes_status" in
         "Next break at"*)
             if [ -f "$PRE_ALERT_FILE" ]; then
-                ICON=""
+                ICON=""
                 COLOR="#FFA500"
             else
                 ICON=""
