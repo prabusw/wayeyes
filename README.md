@@ -1,9 +1,10 @@
-#  Wayeyes - Lightweight tool to reduce eye strain for Wayland compositors
+#  Wayeyes - Lightweight tool to reduce eye strain for wlroots based Wayland compositors
 
-Wayeyes is a lightweight tool to reduce eye strain for Wayland
-compositors like [Sway](https://swaywm.org/), Weston etc. This shell
+Wayeyes is a lightweight tool to reduce eye strain for wlroots based
+Wayland compositors like [Sway](https://swaywm.org/). This shell
 script is designed to work with a service manager like OpenRC or
-systemd and requires [wlopm](https://git.sr.ht/~leon_plickat/wlopm) utility.
+systemd and requires [wlopm](https://git.sr.ht/~leon_plickat/wlopm)
+utility.
 
 The tool currently has the following features:
 
