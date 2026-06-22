@@ -1,11 +1,10 @@
 #!/usr/bin/env sh
 
-# An Eye Care Script for Sway
+# An Eye Care Script for Wayland based on wlopm
 
-SERVICE_NAME="swayeyes"
+SERVICE_NAME="wayeyes"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
-LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/$SERVICE_NAME"
-LOG_FILE="$LOG_DIR/swayeyes.log"
+LOG_FILE="${XDG_DATA_HOME:-$HOME/.local/share}/$SERVICE_NAME/wayeyes.log"
 
 # Runtime files
 NEXT_BLANK_FILE="$RUNTIME_DIR/$SERVICE_NAME.next"
@@ -20,12 +19,6 @@ PRE_ALERT=60       # 1 minute warning
 POLL_INTERVAL=10   # Check every 10 seconds
 I3BLOCKS_SIGNAL=3  # Signal for i3blocks
 
-# Check for notification capabilities once at startup
-command -v notify-send >/dev/null 2>&1 && HAS_NOTIFY=1 || HAS_NOTIFY=0
-
-# Create directories
-mkdir -p "$LOG_DIR" "$RUNTIME_DIR"
-
 # Logging function
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') [$SERVICE_NAME] $*" >> "$LOG_FILE"
@@ -33,13 +26,8 @@ log() {
 
 # Notification function
 notify() {
-	[ "$HAS_NOTIFY" -eq 1 ] && notify-send "$*"
-    log "NOTIFY: $*"
-}
-
-notify_break() {
-	[ "$HAS_NOTIFY" -eq 1 ] && notify-send -a "RSI" "$*"
-    log "NOTIFY: $*"
+    notify-send ${2:+-a "$2"} "$1" 2>/dev/null
+    log "NOTIFY: $1"
 }
 
 # Signal i3blocks to update
@@ -47,37 +35,10 @@ signal_i3blocks() {
     pkill -RTMIN+$I3BLOCKS_SIGNAL i3blocks 2>/dev/null
 }
 
-# Check if Sway is running and set SWAYSOCK
-setup_sway() {
-    if [ -z "$SWAYSOCK" ]; then
-        SWAYSOCK=$(find "$RUNTIME_DIR" -type s -name 'sway-ipc.*' 2>/dev/null | head -n 1)
-        export SWAYSOCK
-    fi
-
-    if [ -z "$SWAYSOCK" ] || ! swaymsg -t get_version >/dev/null 2>&1; then
-        log "ERROR: Cannot connect to Sway"
-        return 1
-    fi
-}
-
-# Get status information
-get_status() {
-    if [ -f "$NEXT_BLANK_FILE" ]; then
-        next_time=$(cat "$NEXT_BLANK_FILE")
-        if [ -n "$next_time" ] && [ "$next_time" -gt 0 ] 2>/dev/null; then
-            echo "Next break at $(date -d "@$next_time" '+%H:%M:%S')"
-            return 0
-        fi
-    fi
-    echo "swayeyes not running"
-    return 1
-}
-
 # Cleanup function
 cleanup() {
     rm -f "$NEXT_BLANK_FILE" "$COUNT_FILE" "$PRE_ALERT_FILE"
     signal_i3blocks
-	notify "$SERVICE_NAME stopped"
     log "Cleanup completed"
 }
 
@@ -86,27 +47,21 @@ trap 'cleanup; exit 0' INT TERM HUP
 
 # Time jump detection for suspend/resume handling
 detect_time_jump() {
-	current_epoch=$1
-
-	# Calculate time delta from our memory variable instead of file reading
+    current_epoch=$1
+    # Calculate time delta from our memory variable instead of file reading
     delta=$((current_epoch - last_loop_time))
-
     # If delta is unusually large (more than 9x polling interval), likely a suspend/resume
     if [ "$delta" -gt $((9 * POLL_INTERVAL)) ]; then
         log "Time jump of ${delta}s detected (suspend/resume?). Resetting break schedule."
-
         # Reset break timer - schedule next break from current time
-            schedule_break 0
-
-            # Clear pre-alert state
-            rm -f "$PRE_ALERT_FILE"
-            signal_i3blocks
-
-            # Notify user about reset
-            notify "System resumed - break timer reset"
-            return 0  # Time jump detected
+        schedule_break 0
+        # Clear pre-alert state
+        rm -f "$PRE_ALERT_FILE"
+        signal_i3blocks
+        # Notify user about reset
+        notify "System resumed - break timer reset"
+        return 0  # Time jump detected
     fi
-
     return 1  # No time jump
 }
 
@@ -121,15 +76,22 @@ schedule_break() {
 
 # Handle subcommands before starting daemon
 case "${1:-}" in
-	"")
-		if [ -f "$NEXT_BLANK_FILE" ]; then
-            echo "swayeyes already running"
+    "")
+        if [ -f "$NEXT_BLANK_FILE" ]; then
+            echo "wayeyes already running"
             exit 1
         fi
         ;;
     status)
-        get_status
-        exit $?
+        if [ -f "$NEXT_BLANK_FILE" ]; then
+            next_time=$(cat "$NEXT_BLANK_FILE")
+            if [ -n "$next_time" ] && [ "$next_time" -gt 0 ] 2>/dev/null; then
+                echo "Next break at $(date -d "@$next_time" '+%H:%M:%S')"
+                exit 0
+            fi
+        fi
+        echo "wayeyes not running"
+        exit 1
         ;;
     help)
         echo "Usage: $0 {status|help|version}"
@@ -140,25 +102,29 @@ case "${1:-}" in
         exit 0
         ;;
     version)
-        echo "  swayeyes 0.5"
+        echo "  wayeyes 0.6"
         echo "  Copyright (C) 2025-2026  Prabu Anand Kalivaradhan"
-        echo "  swayeyes comes with NO WARRANTY, to the extent permitted by law."
-        echo "  Home page: git.sr.ht/~prabuanand/swayeyes"
+        echo "  wayeyes comes with NO WARRANTY, to the extent permitted by law."
+        echo "  Home page: git.sr.ht/~prabuanand/wayeyes"
         exit 0
         ;;
-	*)
+    *)
         echo "Unknown command: ${1}"
         echo "Usage: $0 {status|help|version}"
         exit 1
         ;;
 esac
 
-if ! setup_sway; then
-    echo "Failed to setup Sway connection"
+# Dependency check
+command -v wlopm >/dev/null 2>&1 || { echo "wlopm not found"; exit 1; }
+
+if ! wlopm >/dev/null 2>&1; then
+    echo "No compatible Wayland compositor found"
     exit 1
 fi
 
-notify "$SERVICE_NAME started"
+# Create directories
+mkdir -p "${LOG_FILE%/*}" "$RUNTIME_DIR"
 
 # Initialize
 count=0
@@ -166,15 +132,16 @@ schedule_break "$count"
 rm -f "$PRE_ALERT_FILE"
 last_loop_time=$(date +%s)
 signal_i3blocks
+notify "$SERVICE_NAME started"
 
 while true; do
-	current_time=$(date +%s)
+    current_time=$(date +%s)
     # Detect suspend/resume events first
-	detect_time_jump "$current_time"
-	time_jump_result=$?
-	# Update our tracking memory point immediately for the next loop execution
-	last_loop_time=$current_time
-	if [ "$time_jump_result" -eq 0 ]; then
+    detect_time_jump "$current_time"
+    time_jump_result=$?
+    # Update our tracking memory point immediately for the next loop execution
+    last_loop_time=$current_time
+    if [ "$time_jump_result" -eq 0 ]; then
         # Time jump detected, schedule already reset, continue to next iteration
         sleep "$POLL_INTERVAL"
         continue
@@ -213,22 +180,22 @@ while true; do
         # Determine break type and send notification
         if [ $((count % 4)) -eq 0 ]; then
             break_duration=$LONG_BREAK
-            notify_break "Time for a long break! Look away from the screen."
+            notify "Time for a long break! Look away from the screen." "RSI"
         else
             break_duration=$SHORT_BREAK
-            notify_break "Time for a short break! Rest your eyes."
+            notify "Time for a short break! Rest your eyes." "RSI"
         fi
 
         sleep 2  # Allow notification to show
 
         # Blank screen
-        swaymsg "output * dpms off"
+        wlopm --off '*'
         log "Screen blanked for ${break_duration}s (break #$count)"
 
         sleep "$break_duration"
 
         # Unblank screen
-        swaymsg "output * dpms on"
+        wlopm --on '*'
         log "Screen unblanked"
 
         # Schedule next break

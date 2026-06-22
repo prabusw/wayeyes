@@ -1,0 +1,36 @@
+#!/usr/bin/env sh
+# Icons are FontAwesome eye-open & eye-slash
+WAYEYES_SCRIPT="$HOME/.local/bin/wayeyes"
+TOGGLE_SCRIPT="$HOME/.local/bin/toggle_wayeyes"
+PRE_ALERT_FILE="${XDG_RUNTIME_DIR:-/tmp}/wayeyes.pre_alert"
+I3BLOCKS_SIGNAL=3
+
+wayeyes_status=$("$WAYEYES_SCRIPT" status 2>/dev/null)
+
+print_block() {
+    case "$wayeyes_status" in
+        "Next break at"*)
+            if [ -f "$PRE_ALERT_FILE" ]; then
+                ICON=""
+                COLOR="#FFA500"
+            else
+                ICON=""
+                COLOR=""
+            fi
+            ;;
+        *)
+            ICON=""
+            COLOR="#FF0000"
+            ;;
+    esac
+    echo "$ICON"
+    echo ""
+    echo "$COLOR"
+}
+
+case "$BLOCK_BUTTON" in
+    1) notify-send "$wayeyes_status" >/dev/null 2>&1 ;;
+    2) "$TOGGLE_SCRIPT" >/dev/null 2>&1 ;;
+esac
+
+print_block

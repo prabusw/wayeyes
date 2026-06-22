@@ -1,12 +1,12 @@
 [Unit]
-Description=Screen blanker service for Sway to protect your eyes
+Description=Screen blanker service for Wayland compositors to protect your eyes
 After=graphical-session.target
 Requires=graphical-session.target
 
 [Service]
 Type=simple
 Environment="XDG_RUNTIME_DIR=/run/user/%U"
-ExecStart=%h/.config/sway/scripts/swayeyes
+ExecStart=%h/.local/bin/wayeyes
 Restart=on-failure
 RestartSec=5
 
