@@ -4,7 +4,7 @@ Wayeyes is a lightweight tool to reduce eye strain for wlroots based
 Wayland compositors like [Sway](https://swaywm.org/). This shell
 script is designed to work with a service manager like OpenRC or
 systemd and requires [wlopm](https://git.sr.ht/~leon_plickat/wlopm)
-utility.
+and libnotify.
 
 The tool currently has the following features:
 
@@ -12,8 +12,7 @@ The tool currently has the following features:
 * Pre-blanking notification alerts.
 * Handles time jumps caused by suspend/resume.
 * Detailed logging.
-* Toggle option available via a separate toggle script to pause and
-  resume the service, which depends on either openRC or systemd .
+* A toggle script is available to stop and start the service.
 * Supports [i3blocks](https://github.com/vivien/i3blocks), a status
 provider for swaybar.
 
@@ -22,8 +21,8 @@ Here are the steps to get the tool working:
 - Place the executable script wayeyes in $HOME/.local/bin/wayeyes
   and ensure that it's in your $PATH
 - If the script location changes, update service and i3blocks scripts
-- Place toggle_wayeyes in $HOME/.local/bin/ and add a keybind to it
-  in sway configuration file.
+- Place the toggle script, toggle_wayeyes in $HOME/.local/bin/ and add
+  a keybind to it in your compositor configuration file.
 - Use the available i3blocks and toggle_wayeyes scripts, if required.
 
 ## Using with openRC
@@ -57,16 +56,25 @@ wayeyes
 ```
 
 Use Ctrl+C to stop. All output goes to the log file at
-$XDG_DATA_HOME/wayeyes/wayeyes.log
+$XDG_DATA_HOME/wayeyes/wayeyes.log.
+
+The following command option is available for quick checks.
+```
+wayeyes status
+```
 
 Refer to my [dotfiles](https://git.sr.ht/~prabuanand/dotfiles) to view
 how this tool is used in Alpine Linux, where it is integrated with
 OpenRC and i3blocks.
 
+## LLM usage
+
+The script and associated service files have been created using LLM
+like claude and gemini.
 
 Copyright (C) 2025-2026 Prabu Anand Kalivaradhan
 
-wayeyes comes with NO WARRANTY, to the extent permitted by
-law. Please feedback, if there are issues when using the tool.
+wayeyes comes with NO WARRANTY, to the extent permitted by law. Please
+report any issues when using the tool.
 
 Home page: https://git.sr.ht/~prabuanand/wayeyes
