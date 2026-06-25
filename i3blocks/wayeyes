@@ -1,36 +1,40 @@
 #!/usr/bin/env sh
 # Icons are FontAwesome eye-open & eye-slash
-WAYEYES_SCRIPT="$HOME/.local/bin/wayeyes"
-TOGGLE_SCRIPT="$HOME/.local/bin/toggle_wayeyes"
-PRE_ALERT_FILE="${XDG_RUNTIME_DIR:-/tmp}/wayeyes.pre_alert"
-I3BLOCKS_SIGNAL=3
+STATE_FILE="${XDG_RUNTIME_DIR:-/tmp}/wayeyes.state"
 
-wayeyes_status=$("$WAYEYES_SCRIPT" status 2>/dev/null)
-
-print_block() {
-    case "$wayeyes_status" in
-        "Next break at"*)
-            if [ -f "$PRE_ALERT_FILE" ]; then
-                ICON=""
-                COLOR="#FFA500"
-            else
-                ICON=""
-                COLOR=""
-            fi
-            ;;
-        *)
-            ICON=""
-            COLOR="#FF0000"
-            ;;
-    esac
-    echo "$ICON"
-    echo ""
-    echo "$COLOR"
-}
+state=$(cat "$STATE_FILE" 2>/dev/null || echo "stopped")
+epoch=$(echo "$state" | awk '{print $2}')
+time=$(date -d "@$epoch" +%H:%M 2>/dev/null)
 
 case "$BLOCK_BUTTON" in
-    1) notify-send "$wayeyes_status" >/dev/null 2>&1 ;;
-    2) "$TOGGLE_SCRIPT" >/dev/null 2>&1 ;;
+    1) notify-send "wayeyes" "Next break at $time" ;;
+    2) pkill -SIGUSR1 wayeyes ;;
 esac
 
-print_block
+case "$state" in
+    pre-alert*)
+        echo ""
+        echo ""
+        echo "#FFA500"
+        ;;
+    running*)
+        echo ""
+        echo ""
+        echo ""
+        ;;
+    paused*)
+        echo ""
+        echo ""
+        echo "#FF0000"
+        ;;
+    blanked*)
+        echo ""
+        echo ""
+        echo ""
+        ;;
+    *)
+        echo ""
+        echo ""
+        echo "#FF0000"
+        ;;
+esac
