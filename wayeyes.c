@@ -6,13 +6,14 @@
 #include <stdint.h>
 #include <sys/timerfd.h>
 #include <poll.h>
+#include <string.h>
 
 #define INTERVAL     900   /* 15 minutes between breaks */
 #define PRE_ALERT     60   /* 1 minute warning */
 #define SHORT_BREAK   20   /* short break duration */
 #define LONG_BREAK    60   /* long break every 4th */
 #define I3SIGNAL       3   /* i3blocks signal number */
-
+#define VERSION "0.7"
 static volatile sig_atomic_t paused = 0;
 static volatile sig_atomic_t resume = 0;
 static volatile sig_atomic_t quit   = 0;
@@ -61,7 +62,13 @@ static void restart_timers(int *ifd, int *pfd, struct pollfd *fds, char *state) 
 }
 
 int main(int argc, char *argv[]) {
-    if (argc > 1) output_arg = argv[1];
+    if (argc > 1) {
+        if (strcmp(argv[1], "--version") == 0) {
+            puts("wayeyes " VERSION);
+            return 0;
+        }
+        output_arg = argv[1];
+    }
 
     const char *runtime = getenv("XDG_RUNTIME_DIR");
     snprintf(state_file, sizeof(state_file), "%s/wayeyes.state",
