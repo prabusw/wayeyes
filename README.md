@@ -1,15 +1,16 @@
 #  Wayeyes - Lightweight RSI tool for wlroots based Wayland compositors
 
 Wayeyes is a lightweight RSI tool for wlroots based Wayland
-compositors like [Sway](https://swaywm.org/). This utility is designed
-to work in a standalone mode by starting from compositor configuration
-file or with a service manager like OpenRC or systemd and requires
+compositors like [Sway](https://swaywm.org/). Eventhough this utility
+can work in a standalone mode by starting from compositor
+configuration file, it is recommended to run it with a service manager
+like OpenRC or systemd. This utility requires
 [wlopm](https://git.sr.ht/~leon_plickat/wlopm) and libnotify.
 
 The tool has the following features:
 
 * Schedules regular screen blanking to prevent eye strain.
-* Pre-blanking notification alerts.
+* Pre-blanking notification alert for long-break.
 * When the system resumes from suspend, resets break timer via
   SIGUSR2.
 * SIGUSR1 can be used to pause and unpause the tool.
@@ -17,7 +18,7 @@ The tool has the following features:
   an argument, only that output will be blanked.
 * When used with tools like
 [i3blocks](https://github.com/vivien/i3blocks) visual indicators can
-be added to bar.
+be added to bar. The icon color changes 1 minute before any break.
 
 Here are the steps to get the tool working:
 
