@@ -9,6 +9,7 @@
 
 #define INTERVAL     900   /* 15 minutes between breaks */
 #define PRE_ALERT     60   /* 1 minute warning */
+#define NOTIFICATION  2    /* 2 seconds notification */
 #define SHORT_BREAK   20   /* short break duration */
 #define LONG_BREAK    60   /* long break every 4th */
 #define I3SIGNAL       3   /* i3blocks signal number */
@@ -54,7 +55,7 @@ static void restart_timers(int *ifd, int *pfd, int *nfd, struct pollfd *fds, cha
     close(*ifd); close(*pfd); close(*nfd);
     *ifd = make_timerfd(INTERVAL);
     *pfd = make_timerfd(INTERVAL - PRE_ALERT);
-    *nfd = make_timerfd(INTERVAL - 10);
+    *nfd = make_timerfd(INTERVAL - NOTIFICATION);
     fds[0].fd = *pfd;
     fds[1].fd = *nfd;
     fds[2].fd = *ifd;
@@ -77,7 +78,7 @@ int main(int argc, char *argv[]) {
     int count = 0;
     int interval_fd  = make_timerfd(INTERVAL);
     int pre_alert_fd = make_timerfd(INTERVAL - PRE_ALERT);
-    int notify_fd   = make_timerfd(INTERVAL - 10);
+    int notify_fd   = make_timerfd(INTERVAL - NOTIFICATION);
 
     char state[64];
     snprintf(state, sizeof(state), "running %ld", time(NULL) + INTERVAL);
@@ -109,6 +110,7 @@ int main(int argc, char *argv[]) {
         if (ret <= 0) continue;
 
         uint64_t exp;
+        int duration = (count + 1) % 4 == 0 ? LONG_BREAK : SHORT_BREAK;
 
         if (fds[0].revents & POLLIN) {
             read(pre_alert_fd, &exp, sizeof(exp));
@@ -118,14 +120,14 @@ int main(int argc, char *argv[]) {
 
         if (fds[1].revents & POLLIN) {
             read(notify_fd, &exp, sizeof(exp));
-            if ((count + 1) % 4 == 0)
-                system("notify-send -a wayeyes wayeyes 'Long break in 10 seconds!'");
+            system((duration == LONG_BREAK)
+                   ? "notify-send -a wayeyes 'Long break in 2 seconds!'"
+                   : "notify-send -a wayeyes 'Short break in 2 seconds!'");
         }
 
         if (fds[2].revents & POLLIN) {
             read(interval_fd, &exp, sizeof(exp));
             count++;
-            int duration = (count % 4 == 0) ? LONG_BREAK : SHORT_BREAK;
             blank(1);
             write_state("blanked");
             sleep(duration);
