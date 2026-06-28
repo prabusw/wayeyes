@@ -6,7 +6,7 @@ Requires=graphical-session.target
 [Service]
 Type=simple
 Environment="XDG_RUNTIME_DIR=/run/user/%U"
-ExecStart=%h/.local/bin/wayeyes
+ExecStart=wayeyes
 Restart=on-failure
 RestartSec=5
 

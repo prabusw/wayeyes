@@ -1,6 +1,6 @@
 #  Wayeyes - Lightweight RSI tool for wlroots based Wayland compositors
 
-Wayeyes is a lightweight RSI tool for wlroots based Wayland
+Wayeyes is a lightweight RSI utility for wlroots based Wayland
 compositors like [Sway](https://swaywm.org/). Eventhough this utility
 can work in a standalone mode by starting from compositor
 configuration file, it is recommended to run it with a service manager
@@ -18,11 +18,13 @@ The tool has the following features:
   an argument, only that output will be blanked.
 * When used with tools like
 [i3blocks](https://github.com/vivien/i3blocks) visual indicators can
-be added to bar. The icon color changes 1 minute before any break.
+be added to bar. The icon color changes 1 minute before any break
+along with a notification.
 
 Here are the steps to get the tool working:
 
-- Place the executable in your $PATH.
+- Place the executable in your $PATH. If this is not done, ensure that
+  complete path is added everywhere.
 - To start wayeyes, either add an entry in your compositor
   configuration file or use a User service manager
 - Add a keybind to "pkill -SIGUSR1 wayeyes" in your compositor
@@ -64,8 +66,6 @@ min_width=20
 Here are the steps to use with OpenRC user service as tested in Alpine
 Linux v3.24.
 
-- Edit the location of executable, if different from
-  $HOME/.local/bin/wayeyes.
 - Place the service file in $HOME/.config/rc/init.d/wayeyes
 - Add and start wayeyes service using the below commands:
   ```

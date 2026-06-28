@@ -4,20 +4,34 @@ STATE_FILE="${XDG_RUNTIME_DIR:-/tmp}/wayeyes.state"
 
 state=$(cat "$STATE_FILE" 2>/dev/null || echo "stopped")
 epoch=$(echo "$state" | awk '{print $2}')
-time=$(date -d "@$epoch" +%H:%M 2>/dev/null)
+time=$(date -d "@$epoch" +%H:%M:%S 2>/dev/null)
 
 case "$BLOCK_BUTTON" in
-    1) notify-send "wayeyes" "Next break at $time" ;;
+    1) case "$state" in
+           running*|pre-alert*)
+               notify-send "wayeyes" "Next break at $time" ;;
+           paused*)
+               notify-send "wayeyes" "Paused" ;;
+           blanked*)
+               notify-send "wayeyes" "On break" ;;
+           *)
+               notify-send "wayeyes" "Not running" ;;
+       esac ;;
     2) pkill -SIGUSR1 wayeyes ;;
 esac
 
 case "$state" in
     pre-alert*)
+        if [ ! -f /tmp/wayeyes.alerted ]; then
+            notify-send "wayeyes" "Next break in a minute"
+            touch /tmp/wayeyes.alerted
+        fi
         echo ""
         echo ""
         echo "#FFA500"
         ;;
     running*)
+        rm -f /tmp/wayeyes.alerted
         echo ""
         echo ""
         echo ""
@@ -28,11 +42,13 @@ case "$state" in
         echo "#FF0000"
         ;;
     blanked*)
+        rm -f /tmp/wayeyes.alerted
         echo ""
         echo ""
         echo ""
         ;;
     *)
+        rm -f /tmp/wayeyes.alerted
         echo ""
         echo ""
         echo "#FF0000"
