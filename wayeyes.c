@@ -4,6 +4,7 @@
 #include <signal.h>
 #include <time.h>
 #include <stdint.h>
+#include <syslog.h>
 #include <sys/timerfd.h>
 #include <poll.h>
 
@@ -34,11 +35,13 @@ static void write_state(const char *state) {
 }
 
 static void blank(int off) {
-    char cmd[128];
-    snprintf(cmd, sizeof(cmd), "wlopm --%s '%s'",
+    char cmd[160];
+    snprintf(cmd, sizeof(cmd), "timeout 5 wlopm --%s '%s'",
              off ? "off" : "on",
              output_arg ? output_arg : "*");
     system(cmd);
+    syslog(LOG_INFO, "screen %s (%s)", off ? "off" : "on",
+           output_arg ? output_arg : "all outputs");
 }
 
 static int make_timerfd(time_t seconds) {
@@ -75,6 +78,8 @@ int main(int argc, char *argv[]) {
     signal(SIGTERM, handle_sigterm);
     signal(SIGINT,  handle_sigterm);
 
+    openlog("wayeyes", LOG_PID, LOG_DAEMON);
+
     int count = 0;
     int interval_fd  = make_timerfd(INTERVAL);
     int pre_alert_fd = make_timerfd(INTERVAL - PRE_ALERT);
@@ -94,6 +99,7 @@ int main(int argc, char *argv[]) {
         if (resume) {
             resume = 0;
             paused = 0;
+            blank(0);
             restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state);
             continue;
         }
@@ -102,6 +108,12 @@ int main(int argc, char *argv[]) {
             write_state("paused");
             while (paused && !quit && !resume) pause();
             if (quit) break;
+            if (resume) {
+                /* woke from suspend while paused: let the resume branch above
+                   handle it (forces blank(0), clears flags, resets timers) */
+                continue;
+            }
+            paused = 0;
             restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state);
             continue;
         }
