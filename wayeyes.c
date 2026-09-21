@@ -15,11 +15,17 @@
 #define LONG_BREAK    60   /* long break every 4th */
 #define I3SIGNAL       3   /* i3blocks signal number */
 
-static volatile sig_atomic_t paused = 0;
+static volatile sig_atomic_t paused_manual = 0;
+static volatile sig_atomic_t paused_idle   = 0;
 static volatile sig_atomic_t resume = 0;
 static volatile sig_atomic_t quit   = 0;
 
-static void handle_sigusr1(int sig) { (void)sig; paused = !paused; }
+static void handle_sigusr1(int sig) { (void)sig; paused_manual = !paused_manual; }
+
+/* idle-pause/idle-resume are no-ops while manually suspended: manual
+   suspension always takes precedence over idle-driven pausing. */
+static void handle_idle_pause(int sig)  { (void)sig; if (!paused_manual) paused_idle = 1; }
+static void handle_idle_resume(int sig) { (void)sig; if (!paused_manual) paused_idle = 0; }
 static void handle_sigusr2(int sig) { (void)sig; resume = 1; }
 static void handle_sigterm(int sig) { (void)sig; quit = 1; }
 
@@ -77,6 +83,8 @@ int main(int argc, char *argv[]) {
     signal(SIGUSR2, handle_sigusr2);
     signal(SIGTERM, handle_sigterm);
     signal(SIGINT,  handle_sigterm);
+    signal(SIGRTMIN+1, handle_idle_pause);
+    signal(SIGRTMIN+2, handle_idle_resume);
 
     openlog("wayeyes", LOG_PID, LOG_DAEMON);
 
@@ -98,22 +106,24 @@ int main(int argc, char *argv[]) {
     while (!quit) {
         if (resume) {
             resume = 0;
-            paused = 0;
+            paused_manual = 0;
+            paused_idle = 0;
             blank(0);
             restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state);
             continue;
         }
 
-        if (paused) {
-            write_state("paused");
-            while (paused && !quit && !resume) pause();
+        if (paused_manual || paused_idle) {
+            write_state(paused_manual ? "suspended" : "paused");
+            syslog(LOG_INFO, "%s", paused_manual ? "suspended" : "paused");
+            while ((paused_manual || paused_idle) && !quit && !resume) pause();
             if (quit) break;
             if (resume) {
                 /* woke from suspend while paused: let the resume branch above
                    handle it (forces blank(0), clears flags, resets timers) */
                 continue;
             }
-            paused = 0;
+            syslog(LOG_INFO, "resumed");
             restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state);
             continue;
         }
