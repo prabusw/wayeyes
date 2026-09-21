@@ -10,7 +10,9 @@ case "$BLOCK_BUTTON" in
     1) case "$state" in
            running*|pre-alert*)
                notify-send "wayeyes" "Next break at $time" ;;
-           paused*)
+           suspended*)
+               notify-send "wayeyes" "Suspended" ;;
+		   paused*)
                notify-send "wayeyes" "Paused" ;;
            blanked*)
                notify-send "wayeyes" "On break" ;;
@@ -36,10 +38,15 @@ case "$state" in
         echo ""
         echo ""
         ;;
-    paused*)
+    suspended*)
         echo ""
         echo ""
         echo "#FF0000"
+        ;;
+	paused*)
+        echo ""
+        echo ""
+        echo "#FFFF00"
         ;;
     blanked*)
         rm -f /tmp/wayeyes.alerted

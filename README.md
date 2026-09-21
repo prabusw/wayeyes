@@ -5,7 +5,9 @@ compositors like [Sway](https://swaywm.org/). Eventhough this utility
 can work in a standalone mode by starting from compositor
 configuration file, it is recommended to run it with a service manager
 like OpenRC or systemd. This utility requires
-[wlopm](https://git.sr.ht/~leon_plickat/wlopm) and libnotify.
+[wlopm](https://git.sr.ht/~leon_plickat/wlopm) to work and libnotify
+for notifications. If Swayidle is available, then idle/resume features
+can be used effectively.
 
 The tool has the following features:
 
@@ -18,8 +20,11 @@ The tool has the following features:
   an argument, only that output will be blanked.
 * When used with tools like
 [i3blocks](https://github.com/vivien/i3blocks) visual indicators can
-be added to bar. The icon color changes 1 minute before any break
-along with a notification.
+be added to bar. The icon color changes
+- 1 minute before any break along with a notification
+- program is paused or suspended either by swayidle or manually
+- screen blanking events and pause/suspension/resume are logged to
+system logger
 
 Here are the steps to get the tool working:
 
@@ -35,6 +40,9 @@ Here are the steps to get the tool working:
   swayidle, use "after-resume 'pkill -SIGUSR2 wayeyes'". For manual
   suspend scripts: add 'pkill -SIGUSR2 wayeyes' after the suspend
   command returns.
+- To add idle using singals SIGRTMIN+1/+2 with swayidle, use "timeout
+  120 'pkill -RTMIN+1 wayeyes' resume 'pkill -RTMIN+2 wayeyes'"
+
 
 ## Build & Install
 
