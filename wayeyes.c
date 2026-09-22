@@ -108,6 +108,7 @@ int main(int argc, char *argv[]) {
             resume = 0;
             paused_manual = 0;
             paused_idle = 0;
+            count = 0;
             blank(0);
             restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state);
             continue;
@@ -124,6 +125,7 @@ int main(int argc, char *argv[]) {
                 continue;
             }
             syslog(LOG_INFO, "resumed");
+            count = 0;
             restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state);
             continue;
         }
