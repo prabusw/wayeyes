@@ -144,7 +144,7 @@ int main(int argc, char *argv[]) {
 
         if (fds[0].revents & POLLIN) {
             read(pre_alert_fd, &exp, sizeof(exp));
-            snprintf(state, sizeof(state), "pre-alert %ld", time(NULL) + PRE_ALERT);
+            snprintf(state, sizeof(state), "pre-alert %ld %d", time(NULL) + PRE_ALERT, count);
             write_state(state);
         }
 
