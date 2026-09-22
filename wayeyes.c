@@ -64,7 +64,8 @@ static int make_timerfd(time_t seconds) {
     return fd;
 }
 
-static void restart_timers(int *ifd, int *pfd, int *nfd, struct pollfd *fds, char *state) {
+static void restart_timers(int *ifd, int *pfd, int *nfd, struct pollfd *fds,
+                            char *state, int count) {
     close(*ifd); close(*pfd); close(*nfd);
     *ifd = make_timerfd(INTERVAL);
     *pfd = make_timerfd(INTERVAL - PRE_ALERT);
@@ -72,7 +73,7 @@ static void restart_timers(int *ifd, int *pfd, int *nfd, struct pollfd *fds, cha
     fds[0].fd = *pfd;
     fds[1].fd = *nfd;
     fds[2].fd = *ifd;
-    snprintf(state, 64, "running %ld", time(NULL) + INTERVAL);
+    snprintf(state, 64, "running %ld %d", time(NULL) + INTERVAL, count);
     write_state(state);
 }
 
@@ -98,7 +99,7 @@ int main(int argc, char *argv[]) {
     int notify_fd   = make_timerfd(INTERVAL - NOTIFICATION);
 
     char state[64];
-    snprintf(state, sizeof(state), "running %ld", time(NULL) + INTERVAL);
+    snprintf(state, sizeof(state), "running %ld %d", time(NULL) + INTERVAL, count);
     write_state(state);
 
     struct pollfd fds[3] = {
@@ -114,7 +115,7 @@ int main(int argc, char *argv[]) {
             paused_idle = 0;
             count = 0;
             blank(0);
-            restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state);
+            restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state, count);
             continue;
         }
 
@@ -131,7 +132,7 @@ int main(int argc, char *argv[]) {
             }
             syslog(LOG_INFO, "resumed");
             count = 0;
-            restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state);
+            restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state, count);
             continue;
         }
 
@@ -161,7 +162,7 @@ int main(int argc, char *argv[]) {
             write_state("blanked");
             sleep(duration);
             blank(0);
-            restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state);
+            restart_timers(&interval_fd, &pre_alert_fd, &notify_fd, fds, state, count);
         }
     }
 
