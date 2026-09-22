@@ -20,7 +20,11 @@ static volatile sig_atomic_t paused_idle   = 0;
 static volatile sig_atomic_t resume = 0;
 static volatile sig_atomic_t quit   = 0;
 
-static void handle_sigusr1(int sig) { (void)sig; paused_manual = !paused_manual; }
+static void handle_sigusr1(int sig) {
+    (void)sig;
+    paused_manual = !paused_manual;
+    if (!paused_manual) paused_idle = 0;
+}
 
 /* idle-pause/idle-resume are no-ops while manually suspended: manual
    suspension always takes precedence over idle-driven pausing. */
@@ -115,8 +119,9 @@ int main(int argc, char *argv[]) {
         }
 
         if (paused_manual || paused_idle) {
-            write_state(paused_manual ? "suspended" : "paused");
-            syslog(LOG_INFO, "%s", paused_manual ? "suspended" : "paused");
+            const char *label = paused_manual ? "suspended" : "paused";
+            write_state(label);
+            syslog(LOG_INFO, "%s", label);
             while ((paused_manual || paused_idle) && !quit && !resume) pause();
             if (quit) break;
             if (resume) {
